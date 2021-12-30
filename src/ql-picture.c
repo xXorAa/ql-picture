@@ -1,0 +1,258 @@
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <MagickWand/MagickWand.h>
+
+char *remove_file_ext(char* file_str)
+{
+	char *ret_str, *lastext, *lastpath;
+
+	if (file_str == NULL)
+		return NULL;
+	if ((ret_str = malloc(strlen(file_str) + 1)) == NULL)
+		return NULL;
+
+	// Make a copy and find the relevant characters.
+
+	strcpy(ret_str, file_str);
+	lastext = strrchr(ret_str, '.');
+	lastpath = strrchr(ret_str, '/');
+
+	if (lastext != NULL)
+	{
+		if (lastpath != NULL)
+		{
+			if (lastpath < lastext)
+			{
+				*lastext = '\0';
+			}
+		}
+		else
+		{
+			*lastext = '\0';
+		}
+	}
+	return ret_str;
+}
+
+int main(int argc, char **argv)
+{
+	char temp_path[PATH_MAX];
+	char *basename;
+	MagickWand *sqlux_wand = NULL, *sqlux_remap_wand = NULL;
+	MagickWand *ql_wand = NULL, *ql_remap_wand = NULL;
+	PixelIterator *pixel_iter = NULL;
+	PixelWand **pixels = NULL;
+	size_t num_pixels;
+	int i, j, qdiv, pix_rgb;
+	uint8_t green = 0, redblue = 0;
+	FILE *sqlux_scr, *ql_scr;
+
+	basename = remove_file_ext(argv[1]);
+
+	switch (MAGICKCORE_QUANTUM_DEPTH) {
+	case 8:
+		qdiv = 1;
+		break;
+	case 16:
+		qdiv = 256;
+		break;
+	default:
+		fprintf(stderr, "Unsupported Quantum %d", MAGICKCORE_QUANTUM_DEPTH);
+		exit(-1);
+	}
+
+	MagickWandGenesis();
+
+	sqlux_wand = NewMagickWand();
+	sqlux_remap_wand= NewMagickWand();
+	ql_wand = NewMagickWand();
+	ql_remap_wand = NewMagickWand();
+
+	MagickReadImage(sqlux_wand, argv[1]);
+	MagickReadImage(ql_wand, argv[1]);
+	MagickReadImage(sqlux_remap_wand, "sqlux-palette.png");
+	MagickReadImage(ql_remap_wand, "ql-palette.png");
+
+	MagickResizeImage(sqlux_wand, 256, 256, LanczosFilter);
+	MagickRemapImage(sqlux_wand, sqlux_remap_wand, FloydSteinbergDitherMethod);
+
+	strncpy(temp_path, basename, PATH_MAX);
+	strncat(temp_path, "_sqlux.png", PATH_MAX);
+
+	MagickWriteImage(sqlux_wand, temp_path);
+
+	MagickResizeImage(ql_wand, 256, 256, LanczosFilter);
+	MagickRemapImage(ql_wand, ql_remap_wand, FloydSteinbergDitherMethod);
+
+	strncpy(temp_path, basename, PATH_MAX);
+	strncat(temp_path, "_ql.png", PATH_MAX);
+
+	MagickWriteImage(ql_wand, temp_path);
+
+	pixel_iter = NewPixelIterator(sqlux_wand);
+	pixels = PixelGetNextIteratorRow(pixel_iter, &num_pixels);
+
+	strncpy(temp_path, basename, PATH_MAX);
+	strncat(temp_path, "_sqlux_scr", PATH_MAX);
+
+	sqlux_scr = fopen(temp_path, "w");
+
+	for (i=0; pixels != (PixelWand **) NULL; i++)
+	{
+		for (j = 0; j < num_pixels; j++){
+
+			green <<= 2;
+			redblue <<= 2;
+
+			pix_rgb = (int)PixelGetRedQuantum(pixels[j])/qdiv;
+			pix_rgb <<= 8;
+			pix_rgb |= (int)PixelGetGreenQuantum(pixels[j])/qdiv;
+			pix_rgb <<= 8;
+			pix_rgb |= (int)PixelGetBlueQuantum(pixels[j])/qdiv;
+
+			switch(pix_rgb) {
+				case 0xFFFFFF:
+					green |= 0x02;
+					redblue |= 0x03;
+					break;
+				case 0x000000:
+					break;
+				case 0xFF0000:
+					redblue |= 0x02;
+					break;
+				case 0xFFFF00:
+					green |= 0x02;
+					redblue |= 0x02;
+					break;
+				case 0xFF00FF:
+					redblue |= 0x03;
+					break;
+				case 0x00FF00:
+					green |= 0x02;
+					break;
+				case 0x00FFFF:
+					green |= 0x02;
+					redblue |= 0x01;
+					break;
+				case 0x0000FF:
+					redblue |= 0x01;
+					break;
+				case 0x7F7F7F:
+					green |= 0x03;
+					redblue |= 0x03;
+					break;
+				case 0x3F3F3F:
+					green |= 0x01;
+					break;
+				case 0x7F0000:
+					green |= 0x01;
+					redblue |= 0x02;
+					break;
+				case 0x7F7F00:
+					green |= 0x03;
+					redblue |= 0x02;
+					break;
+				case 0x7F007F:
+					green |= 0x01;
+					redblue |= 0x03;
+					break;
+				case 0x007F00:
+					green |= 0x03;
+					break;
+				case 0x007F7F:
+					green |= 0x03;
+					redblue |= 0x01;
+					break;
+				case 0x00007F:
+					green |= 0x01;
+					redblue |= 0x01;
+					break;
+			}
+
+			if (((j + 1) % 4) == 0) {
+				fwrite(&green, 1, 1, sqlux_scr);
+				fwrite(&redblue, 1, 1, sqlux_scr);
+			}
+		}
+
+		pixels=PixelGetNextIteratorRow(pixel_iter, &num_pixels);
+	}
+
+	fclose(sqlux_scr);
+
+	pixel_iter = NewPixelIterator(ql_wand);
+	pixels = PixelGetNextIteratorRow(pixel_iter, &num_pixels);
+
+	strncpy(temp_path, basename, PATH_MAX);
+	strncat(temp_path, "_ql_scr", PATH_MAX);
+
+	ql_scr = fopen(temp_path, "w");
+
+	for (i=0; pixels != (PixelWand **) NULL; i++)
+	{
+		for (j = 0; j < num_pixels; j++){
+
+			green <<= 2;
+			redblue <<= 2;
+
+			pix_rgb = (int)PixelGetRedQuantum(pixels[j])/qdiv;
+			pix_rgb <<= 8;
+			pix_rgb |= (int)PixelGetGreenQuantum(pixels[j])/qdiv;
+			pix_rgb <<= 8;
+			pix_rgb |= (int)PixelGetBlueQuantum(pixels[j])/qdiv;
+
+			switch(pix_rgb) {
+				case 0xFFFFFF:
+					green |= 0x02;
+					redblue |= 0x03;
+					break;
+				case 0x000000:
+					break;
+				case 0xFF0000:
+					redblue |= 0x02;
+					break;
+				case 0xFFFF00:
+					green |= 0x02;
+					redblue |= 0x02;
+					break;
+				case 0xFF00FF:
+					redblue |= 0x03;
+					break;
+				case 0x00FF00:
+					green |= 0x02;
+					break;
+				case 0x00FFFF:
+					green |= 0x02;
+					redblue |= 0x01;
+					break;
+				case 0x0000FF:
+					redblue |= 0x01;
+					break;
+			}
+
+			if (((j + 1) % 4) == 0) {
+				fwrite(&green, 1, 1, ql_scr);
+				fwrite(&redblue, 1, 1, ql_scr);
+			}
+		}
+
+		pixels=PixelGetNextIteratorRow(pixel_iter, &num_pixels);
+	}
+
+	fclose(ql_scr);
+
+	/* Clean up */
+	if(sqlux_wand)
+		sqlux_wand = DestroyMagickWand(sqlux_wand);
+	if(sqlux_remap_wand)
+		sqlux_wand = DestroyMagickWand(sqlux_remap_wand);
+	if(ql_wand)
+		ql_wand = DestroyMagickWand(ql_wand);
+	if(ql_remap_wand)
+		ql_remap_wand = DestroyMagickWand(ql_remap_wand);
+
+	MagickWandTerminus();
+}

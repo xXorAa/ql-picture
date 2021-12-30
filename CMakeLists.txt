@@ -1,0 +1,18 @@
+project(ql-pictures)
+cmake_minimum_required(VERSION 3.16)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
+find_package(ImageMagick COMPONENTS MagickWand)
+
+list(JOIN ImageMagick_DEFINITIONS " " IM_DEFS)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${IM_DEFS}")
+
+include_directories(${ImageMagick_INCLUDE_DIRS})
+
+add_executable(ql-picture
+    src/ql-picture.c
+    )
+
+target_link_libraries(ql-picture ${ImageMagick_LIBRARIES})
+
