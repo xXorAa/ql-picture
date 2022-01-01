@@ -3,7 +3,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef MAGICK_V6
+#include <wand/MagickWand.h>
+#else
 #include <MagickWand/MagickWand.h>
+#endif
 
 char *remove_file_ext(char* file_str)
 {
@@ -39,7 +43,7 @@ char *remove_file_ext(char* file_str)
 
 int main(int argc, char **argv)
 {
-	char temp_path[PATH_MAX];
+	char temp_path[PATH_MAX + 1];
 	char *basename;
 	MagickWand *sqlux_wand = NULL, *sqlux_remap_wand = NULL;
 	MagickWand *ql_wand = NULL, *ql_remap_wand = NULL;
@@ -76,7 +80,12 @@ int main(int argc, char **argv)
 	MagickReadImage(sqlux_remap_wand, "sqlux-palette.png");
 	MagickReadImage(ql_remap_wand, "ql-palette.png");
 
+	/* API incompatablity between v6 and v7 */
+#ifdef MAGICK_V6
+	MagickResizeImage(sqlux_wand, 256, 256, LanczosFilter, 1);
+#else
 	MagickResizeImage(sqlux_wand, 256, 256, LanczosFilter);
+#endif
 	MagickRemapImage(sqlux_wand, sqlux_remap_wand, FloydSteinbergDitherMethod);
 
 	strncpy(temp_path, basename, PATH_MAX);
@@ -84,7 +93,12 @@ int main(int argc, char **argv)
 
 	MagickWriteImage(sqlux_wand, temp_path);
 
+	/* API incompatablity between v6 and v7 */
+#ifdef MAGICK_V6
+	MagickResizeImage(ql_wand, 256, 256, LanczosFilter, 1);
+#else
 	MagickResizeImage(ql_wand, 256, 256, LanczosFilter);
+#endif	
 	MagickRemapImage(ql_wand, ql_remap_wand, FloydSteinbergDitherMethod);
 
 	strncpy(temp_path, basename, PATH_MAX);
