@@ -9,6 +9,8 @@
 #include <MagickWand/MagickWand.h>
 #endif
 
+#include "ql-palette.h"
+
 char *remove_file_ext(char* file_str)
 {
 	char *ret_str, *lastext, *lastpath;
@@ -74,7 +76,7 @@ int main(int argc, char **argv)
 	ql_remap_wand = NewMagickWand();
 
 	MagickReadImage(ql_wand, argv[1]);
-	MagickReadImage(ql_remap_wand, "ql-palette.png");
+	MagickReadImageBlob(ql_remap_wand, ql_palette_mode8, sizeof(ql_palette_mode8));
 
 	/* API incompatablity between v6 and v7 */
 #ifdef MAGICK_V6
