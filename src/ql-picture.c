@@ -12,6 +12,9 @@
 #include "args.h"
 #include "ql-palette.h"
 
+#define QL_FORMAT_SCR 's'
+#define QL_FORMAT_PIC 'p'
+
 char *remove_file_ext(char* file_str)
 {
 	char *ret_str, *lastext, *lastpath;
@@ -54,7 +57,7 @@ int main(int argc, char **argv)
 	PixelIterator *pixel_iter = NULL;
 	PixelWand **pixels = NULL;
 	size_t num_pixels;
-	int i, j, qdiv, pix_rgb, mode;
+	int i, j, qdiv, pix_rgb, mode = 8, format = QL_FORMAT_SCR;
 	uint8_t green = 0, redblue = 0, byte1 = 0, byte2 = 0;
 	FILE *sqlux_scr, *ql_scr;
 
@@ -95,6 +98,15 @@ Options:\n\
 
 	if (!((mode == 4) || (mode == 8))) {
 		printf("Mode must be 4 or 8\n");
+		exit(1);
+	}
+
+	if (strcasecmp("scr", ap_get_str_value(parser, "format")) == 0) {
+		format = QL_FORMAT_SCR;
+	} else if (strcasecmp("pic", ap_get_str_value(parser, "format")) == 0) {
+		format = QL_FORMAT_PIC;
+	} else {
+		printf("Invalid format %s\n", ap_get_str_value(parser, "format"));
 		exit(1);
 	}
 
@@ -153,9 +165,38 @@ Options:\n\
 	pixels = PixelGetNextIteratorRow(pixel_iter, &num_pixels);
 
 	strncpy(temp_path, basename, PATH_MAX);
-	strncat(temp_path, "_scr", PATH_MAX);
+
+	if (format == QL_FORMAT_SCR) {
+		strncat(temp_path, "_scr", PATH_MAX);
+	} else {
+		strncat(temp_path, "_pic", PATH_MAX);
+	}
 
 	ql_scr = fopen(temp_path, "w");
+
+	if (format == QL_FORMAT_PIC) {
+		fputc(0x4A, ql_scr);
+		fputc(0xFC, ql_scr);
+		if (mode == 4) {
+			// X 512
+			fputc(0x02, ql_scr);
+			fputc(0x00, ql_scr);
+		} else {
+			// X 256
+			fputc(0x01, ql_scr);
+			fputc(0x00, ql_scr);
+		}
+		// Y 256
+		fputc(0x01, ql_scr);
+		fputc(0x00, ql_scr);
+
+		// bytes 128
+		fputc(0x00, ql_scr);
+		fputc(0x80, ql_scr);
+
+		fputc(mode, ql_scr);
+		fputc(0, ql_scr);
+	}
 
 	switch (mode) {
 	case 4:
