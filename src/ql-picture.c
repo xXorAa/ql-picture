@@ -70,35 +70,18 @@ int main(int argc, char **argv)
 
 	MagickWandGenesis();
 
-	sqlux_wand = NewMagickWand();
-	sqlux_remap_wand= NewMagickWand();
 	ql_wand = NewMagickWand();
 	ql_remap_wand = NewMagickWand();
 
-	MagickReadImage(sqlux_wand, argv[1]);
 	MagickReadImage(ql_wand, argv[1]);
-	MagickReadImage(sqlux_remap_wand, "sqlux-palette.png");
 	MagickReadImage(ql_remap_wand, "ql-palette.png");
-
-	/* API incompatablity between v6 and v7 */
-#ifdef MAGICK_V6
-	MagickResizeImage(sqlux_wand, 256, 256, LanczosFilter, 1);
-#else
-	MagickResizeImage(sqlux_wand, 256, 256, LanczosFilter);
-#endif
-	MagickRemapImage(sqlux_wand, sqlux_remap_wand, FloydSteinbergDitherMethod);
-
-	strncpy(temp_path, basename, PATH_MAX);
-	strncat(temp_path, "_sqlux.png", PATH_MAX);
-
-	MagickWriteImage(sqlux_wand, temp_path);
 
 	/* API incompatablity between v6 and v7 */
 #ifdef MAGICK_V6
 	MagickResizeImage(ql_wand, 256, 256, LanczosFilter, 1);
 #else
 	MagickResizeImage(ql_wand, 256, 256, LanczosFilter);
-#endif	
+#endif
 	MagickRemapImage(ql_wand, ql_remap_wand, FloydSteinbergDitherMethod);
 
 	strncpy(temp_path, basename, PATH_MAX);
@@ -106,102 +89,11 @@ int main(int argc, char **argv)
 
 	MagickWriteImage(ql_wand, temp_path);
 
-	pixel_iter = NewPixelIterator(sqlux_wand);
-	pixels = PixelGetNextIteratorRow(pixel_iter, &num_pixels);
-
-	strncpy(temp_path, basename, PATH_MAX);
-	strncat(temp_path, "_sqlux_scr", PATH_MAX);
-
-	sqlux_scr = fopen(temp_path, "w");
-
-	for (i=0; pixels != (PixelWand **) NULL; i++)
-	{
-		for (j = 0; j < num_pixels; j++){
-
-			green <<= 2;
-			redblue <<= 2;
-
-			pix_rgb = (int)PixelGetRedQuantum(pixels[j])/qdiv;
-			pix_rgb <<= 8;
-			pix_rgb |= (int)PixelGetGreenQuantum(pixels[j])/qdiv;
-			pix_rgb <<= 8;
-			pix_rgb |= (int)PixelGetBlueQuantum(pixels[j])/qdiv;
-
-			switch(pix_rgb) {
-				case 0xFFFFFF:
-					green |= 0x02;
-					redblue |= 0x03;
-					break;
-				case 0x000000:
-					break;
-				case 0xFF0000:
-					redblue |= 0x02;
-					break;
-				case 0xFFFF00:
-					green |= 0x02;
-					redblue |= 0x02;
-					break;
-				case 0xFF00FF:
-					redblue |= 0x03;
-					break;
-				case 0x00FF00:
-					green |= 0x02;
-					break;
-				case 0x00FFFF:
-					green |= 0x02;
-					redblue |= 0x01;
-					break;
-				case 0x0000FF:
-					redblue |= 0x01;
-					break;
-				case 0x7F7F7F:
-					green |= 0x03;
-					redblue |= 0x03;
-					break;
-				case 0x3F3F3F:
-					green |= 0x01;
-					break;
-				case 0x7F0000:
-					green |= 0x01;
-					redblue |= 0x02;
-					break;
-				case 0x7F7F00:
-					green |= 0x03;
-					redblue |= 0x02;
-					break;
-				case 0x7F007F:
-					green |= 0x01;
-					redblue |= 0x03;
-					break;
-				case 0x007F00:
-					green |= 0x03;
-					break;
-				case 0x007F7F:
-					green |= 0x03;
-					redblue |= 0x01;
-					break;
-				case 0x00007F:
-					green |= 0x01;
-					redblue |= 0x01;
-					break;
-			}
-
-			if (((j + 1) % 4) == 0) {
-				fwrite(&green, 1, 1, sqlux_scr);
-				fwrite(&redblue, 1, 1, sqlux_scr);
-			}
-		}
-
-		pixels=PixelGetNextIteratorRow(pixel_iter, &num_pixels);
-	}
-
-	fclose(sqlux_scr);
-
 	pixel_iter = NewPixelIterator(ql_wand);
 	pixels = PixelGetNextIteratorRow(pixel_iter, &num_pixels);
 
 	strncpy(temp_path, basename, PATH_MAX);
-	strncat(temp_path, "_ql_scr", PATH_MAX);
+	strncat(temp_path, "_scr", PATH_MAX);
 
 	ql_scr = fopen(temp_path, "w");
 
@@ -259,10 +151,6 @@ int main(int argc, char **argv)
 	fclose(ql_scr);
 
 	/* Clean up */
-	if(sqlux_wand)
-		sqlux_wand = DestroyMagickWand(sqlux_wand);
-	if(sqlux_remap_wand)
-		sqlux_wand = DestroyMagickWand(sqlux_remap_wand);
 	if(ql_wand)
 		ql_wand = DestroyMagickWand(ql_wand);
 	if(ql_remap_wand)
