@@ -9,6 +9,7 @@
 #include <MagickWand/MagickWand.h>
 #endif
 
+#include "args.h"
 #include "ql-palette.h"
 
 char *remove_file_ext(char* file_str)
@@ -55,6 +56,37 @@ int main(int argc, char **argv)
 	int i, j, qdiv, pix_rgb;
 	uint8_t green = 0, redblue = 0;
 	FILE *sqlux_scr, *ql_scr;
+
+    ArgParser* parser = ap_new_parser();
+    if (!parser) {
+        exit(1);
+    }
+
+    // Register the program's helptext and version number.
+    ap_set_helptext(parser, "Usage: ql-picture [OPTIONS] <file>\n\
+\n\
+Options:\n\
+  -h,--help            Print this help message and exit\n\
+  -m,--mode            QL mode 4/8 default(8)\n\
+  -f,--format          format pic/scr default(scr)\n\
+  -v,--version         version\n");
+
+    ap_set_version(parser, "1.0");
+
+    // Register a flag and a string-valued option.
+    ap_add_int_opt(parser, "mode m", 8);
+    ap_add_str_opt(parser, "format f", "scr");
+
+    // Parse the command line arguments.
+    if (!ap_parse(parser, argc, argv)) {
+        exit(1);
+    }
+
+	if (ap_count_args(parser) != 1) {
+		printf("Needs <file>\n");
+		printf("%s\n", ap_get_helptext(parser));
+		exit(1);
+	}
 
 	basename = remove_file_ext(argv[1]);
 
@@ -159,4 +191,6 @@ int main(int argc, char **argv)
 		ql_remap_wand = DestroyMagickWand(ql_remap_wand);
 
 	MagickWandTerminus();
+
+	ap_free(parser);
 }

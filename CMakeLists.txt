@@ -12,9 +12,10 @@ list(JOIN ImageMagick_DEFINITIONS " " IM_DEFS)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${IM_DEFS}")
 
-include_directories(${ImageMagick_INCLUDE_DIRS} include/)
+include_directories(${ImageMagick_INCLUDE_DIRS} include/ args/src/)
 
 add_executable(ql-picture
+    args/src/args.c
     src/ql-palette.c
     src/ql-picture.c
     )
