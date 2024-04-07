@@ -48,13 +48,14 @@ int main(int argc, char **argv)
 {
 	char temp_path[PATH_MAX + 1];
 	char *basename;
+	char *filename;
 	MagickWand *sqlux_wand = NULL, *sqlux_remap_wand = NULL;
 	MagickWand *ql_wand = NULL, *ql_remap_wand = NULL;
 	PixelIterator *pixel_iter = NULL;
 	PixelWand **pixels = NULL;
 	size_t num_pixels;
-	int i, j, qdiv, pix_rgb;
-	uint8_t green = 0, redblue = 0;
+	int i, j, qdiv, pix_rgb, mode;
+	uint8_t green = 0, redblue = 0, byte1 = 0, byte2 = 0;
 	FILE *sqlux_scr, *ql_scr;
 
     ArgParser* parser = ap_new_parser();
@@ -88,7 +89,16 @@ Options:\n\
 		exit(1);
 	}
 
-	basename = remove_file_ext(argv[1]);
+	filename = ap_get_arg_at_index(parser, 0);
+
+	mode = ap_get_int_value(parser, "mode");
+
+	if (!((mode == 4) || (mode == 8))) {
+		printf("Mode must be 4 or 8\n");
+		exit(1);
+	}
+
+	basename = remove_file_ext(filename);
 
 	switch (MAGICKCORE_QUANTUM_DEPTH) {
 	case 8:
@@ -107,16 +117,32 @@ Options:\n\
 	ql_wand = NewMagickWand();
 	ql_remap_wand = NewMagickWand();
 
-	MagickReadImage(ql_wand, argv[1]);
-	MagickReadImageBlob(ql_remap_wand, ql_palette_mode8, sizeof(ql_palette_mode8));
+	MagickReadImage(ql_wand, filename);
 
-	/* API incompatablity between v6 and v7 */
+	switch(mode) {
+	case 8:
+		MagickReadImageBlob(ql_remap_wand, ql_palette_mode8, sizeof(ql_palette_mode8));
+
+		/* API incompatablity between v6 and v7 */
 #ifdef MAGICK_V6
-	MagickResizeImage(ql_wand, 256, 256, LanczosFilter, 1);
+		MagickResizeImage(ql_wand, 256, 256, LanczosFilter, 1);
 #else
-	MagickResizeImage(ql_wand, 256, 256, LanczosFilter);
+		MagickResizeImage(ql_wand, 256, 256, LanczosFilter);
 #endif
-	MagickRemapImage(ql_wand, ql_remap_wand, FloydSteinbergDitherMethod);
+		MagickRemapImage(ql_wand, ql_remap_wand, FloydSteinbergDitherMethod);
+		break;
+	case 4:
+		MagickReadImageBlob(ql_remap_wand, ql_palette_mode4, sizeof(ql_palette_mode4));
+
+		/* API incompatablity between v6 and v7 */
+#ifdef MAGICK_V6
+		MagickResizeImage(ql_wand, 512, 256, LanczosFilter, 1);
+#else
+		MagickResizeImage(ql_wand, 512, 256, LanczosFilter);
+#endif
+		MagickRemapImage(ql_wand, ql_remap_wand, FloydSteinbergDitherMethod);
+		break;
+	}
 
 	strncpy(temp_path, basename, PATH_MAX);
 	strncat(temp_path, "_ql.png", PATH_MAX);
@@ -131,20 +157,67 @@ Options:\n\
 
 	ql_scr = fopen(temp_path, "w");
 
-	for (i=0; pixels != (PixelWand **) NULL; i++)
-	{
-		for (j = 0; j < num_pixels; j++){
+	switch (mode) {
+	case 4:
+		for (i = 0; pixels != (PixelWand **)NULL; i++) {
+			for (j = 0; j < num_pixels; j++) {
+				byte1 <<= 1;
+				byte2 <<= 1;
 
-			green <<= 2;
-			redblue <<= 2;
+				pix_rgb = (int)PixelGetRedQuantum(pixels[j]) /
+					  qdiv;
+				pix_rgb <<= 8;
+				pix_rgb |=
+					(int)PixelGetGreenQuantum(pixels[j]) /
+					qdiv;
+				pix_rgb <<= 8;
+				pix_rgb |= (int)PixelGetBlueQuantum(pixels[j]) /
+					   qdiv;
 
-			pix_rgb = (int)PixelGetRedQuantum(pixels[j])/qdiv;
-			pix_rgb <<= 8;
-			pix_rgb |= (int)PixelGetGreenQuantum(pixels[j])/qdiv;
-			pix_rgb <<= 8;
-			pix_rgb |= (int)PixelGetBlueQuantum(pixels[j])/qdiv;
+				switch (pix_rgb) {
+				case 0xFFFFFF:
+					byte1 |= 0x01;
+					byte2 |= 0x01;
+					break;
+				case 0x000000:
+					break;
+				case 0xFF0000:
+					byte2 |= 0x01;
+					break;
+				case 0x00FF00:
+					byte1 |= 0x01;
+					break;
+				default:
+					printf("Unknown RGB %06x\n", pix_rgb);
+				}
 
-			switch(pix_rgb) {
+				if (((j + 1) % 8) == 0) {
+					fwrite(&byte1, 1, 1, ql_scr);
+					fwrite(&byte2, 1, 1, ql_scr);
+				}
+			}
+
+			pixels = PixelGetNextIteratorRow(pixel_iter,
+							 &num_pixels);
+		}
+		break;
+	case 8:
+		for (i = 0; pixels != (PixelWand **)NULL; i++) {
+			for (j = 0; j < num_pixels; j++) {
+				green <<= 2;
+				redblue <<= 2;
+
+				pix_rgb = (int)PixelGetRedQuantum(pixels[j]) /
+					  qdiv;
+				pix_rgb <<= 8;
+				pix_rgb |=
+					(int)PixelGetGreenQuantum(pixels[j]) /
+					qdiv;
+				pix_rgb <<= 8;
+				pix_rgb |= (int)PixelGetBlueQuantum(pixels[j]) /
+					   qdiv;
+
+				switch (pix_rgb) {
 				case 0xFFFFFF:
 					green |= 0x02;
 					redblue |= 0x03;
@@ -171,19 +244,25 @@ Options:\n\
 				case 0x0000FF:
 					redblue |= 0x01;
 					break;
+				default:
+					printf("Unknown RGB %06x\n", pix_rgb);
+				}
+
+				if (((j + 1) % 4) == 0) {
+					fwrite(&green, 1, 1, ql_scr);
+					fwrite(&redblue, 1, 1, ql_scr);
+				}
 			}
 
-			if (((j + 1) % 4) == 0) {
-				fwrite(&green, 1, 1, ql_scr);
-				fwrite(&redblue, 1, 1, ql_scr);
-			}
+			pixels = PixelGetNextIteratorRow(pixel_iter,
+							 &num_pixels);
 		}
-
-		pixels=PixelGetNextIteratorRow(pixel_iter, &num_pixels);
+		break;
 	}
 
 	fclose(ql_scr);
 
+exit:
 	/* Clean up */
 	if(ql_wand)
 		ql_wand = DestroyMagickWand(ql_wand);
